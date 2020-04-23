@@ -1,0 +1,7 @@
+requests==2.22.0
+termcolor==1.1.0
+click==7.1.1
+colorama==0.4.3
+six==1.12.0
+pyfiglet==0.8.post1
+PyInquirer==1.0.3
