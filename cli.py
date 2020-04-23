@@ -130,7 +130,7 @@ def askPersonalData():
         {
             'type': 'input',
             'name': 'born_date',
-            'message': 'Data de Nascimento do Titular',
+            'message': 'Data de Nascimento do Titular (AAAA-MM-DD)',
             'validate': EmptyValidator
         },
         {
