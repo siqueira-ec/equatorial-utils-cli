@@ -1,16 +1,29 @@
 #!/usr/bin/env python3
 
-import os
-import re
-
 import requests as rq
 import json
 from base64 import b64decode
 
 import click
 import six
-from PyInquirer import (Token, ValidationError, Validator, print_json, prompt,
-                        style_from_dict)
+
+from questionary import prompt, ValidationError, Validator
+from prompt_toolkit.styles import Style
+
+
+style = Style([
+    ('qmark', 'fg:#fac731 bold'),       # token in front of the question
+    ('question', ''),               # question text
+    ('pointer', 'fg:#673ab7 bold'),     # pointer used in select and checkbox prompts
+    ('highlighted', 'fg:#673ab7 bold'), # pointed-at choice in select and checkbox prompts
+    ('selected', 'fg:#0abf5b'),         # style for a selected item of a checkbox
+    ('separator', 'fg:#cc5454'),        # separator in lists
+    ('instruction', ''),                # user instructions for select, rawselect, checkbox
+    ('text', 'fg:#4688f1 bold'),                       # plain text
+    ('disabled', 'fg:#858585 italic'),   # disabled choices for select and checkbox prompts
+    ('answer', 'fg:#f44336 bold'),      # submitted answer text behind the question
+
+])
 
 from pyfiglet import figlet_format
 
@@ -24,16 +37,6 @@ try:
     from termcolor import colored
 except ImportError:
     colored = None
-
-style = style_from_dict({
-    Token.QuestionMark: '#fac731 bold',
-    Token.Answer: '#4688f1 bold',
-    Token.Instruction: '',  # default
-    Token.Separator: '#cc5454',
-    Token.Selected: '#0abf5b',  # default
-    Token.Pointer: '#673ab7 bold',
-    Token.Question: '',
-})
 
 def getContentType(answer, conttype):
     return answer.get("content_type").lower() == conttype.lower()
