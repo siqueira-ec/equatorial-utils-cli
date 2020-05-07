@@ -208,6 +208,8 @@ def askUcs(personal_data):
 
     uc_choices = []
 
+    selected = []
+
     for uc in ucs:
         uc_choices.append(
             Choice(
@@ -229,15 +231,19 @@ def askUcs(personal_data):
         style=custom_style
     ).ask()
 
+
+
+    # selected all ucs
     if selected_uc == 'all':
-        selected_uc = []
-
         for choice in uc_choices:
-            selected_uc.append(choice.value)
+            selected.append(choice.value)
 
-        selected_uc.pop()
+        selected.pop()
+    # selected single uc
+    else:
+        selected.append(selected_uc)
 
-    return selected_uc
+    return selected
 
 def askPersonalData():
     cpf = questionary.text(
@@ -261,9 +267,15 @@ def saveOpenBills(uc_bills_dict, token):
                 bill_data = getBillPdf(bill['numeroFatura'], token)
 
                 try:
-                    saveBillPdf(bill_data, bill['competencia'])
+                    saveBillPdf(
+                        bill_data=bill_data,
+                        period=bill['competencia'],
+                        name='fatura_equatorial_{uc}'.format(uc=index)
+                    )
                 except Exception as e:
                     raise Exception("Ocorreu um erro ao salvar a fatura: %s" % (e))
+        else:
+            print('Sem faturas abertas para a uc {uc}!'.format(uc=index))
 
 @click.command()
 def main():
@@ -284,16 +296,6 @@ def main():
         saveOpenBills(uc_bills_dict, token)
     except Exception as e:
         raise(e)
-
-    # for index in uc_bills_dict:
-    #     if type(uc_bills_dict[index]) is list:
-    #         for bill in uc_bills_dict[index]:
-    #             bill_data = getBillPdf(bill['numeroFatura'], token)
-
-    #             try:
-    #                 response = saveBillPdf(bill['competencia'], bill_data)
-    #             except Exception as e:
-    #                 raise Exception("Ocorreu um erro ao salvar a fatura: %s" % (e))
 
 if __name__ == '__main__':
     main()
