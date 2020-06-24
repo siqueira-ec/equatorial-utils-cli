@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 
+import sys
+import time
+import threading
+
 import requests as rq
 import json
 from base64 import b64decode
@@ -24,18 +28,58 @@ try:
 except ImportError:
     colored = None
 
+
+class Spinner:
+    busy = False
+    delay = 0.1
+
+    @staticmethod
+    def spinning_cursor():
+        while 1:
+            for cursor in '|/-\\':
+                yield cursor
+
+    def __init__(self, delay=None):
+        self.spinner_generator = self.spinning_cursor()
+        if delay and float(delay):
+            self.delay = delay
+
+    def spinner_task(self):
+        while self.busy:
+            sys.stdout.write(next(self.spinner_generator))
+            sys.stdout.flush()
+            time.sleep(self.delay)
+            sys.stdout.write('\b')
+            sys.stdout.flush()
+
+    def __enter__(self):
+        self.busy = True
+        threading.Thread(target=self.spinner_task).start()
+
+    def __exit__(self, exception, value, tb):
+        self.busy = False
+        time.sleep(self.delay)
+        if exception is not None:
+            return False
+
+
 # custom style for question properties
 custom_style = Style([
     ('qmark', 'fg:#fac731 bold'),       # token in front of the question
     ('question', ''),               # question text
-    ('pointer', 'fg:#673ab7 bold'),     # pointer used in select and checkbox prompts
-    ('highlighted', 'fg:#673ab7 bold'), # pointed-at choice in select and checkbox prompts
+    # pointer used in select and checkbox prompts
+    ('pointer', 'fg:#673ab7 bold'),
+    # pointed-at choice in select and checkbox prompts
+    ('highlighted', 'fg:#673ab7 bold'),
     ('selected', 'fg:#0abf5b'),         # style for a selected item of a checkbox
     ('separator', 'fg:#cc5454'),        # separator in lists
-    ('instruction', ''),                # user instructions for select, rawselect, checkbox
+    # user instructions for select, rawselect, checkbox
+    ('instruction', ''),
     ('text', 'fg:#4688f1 bold'),                       # plain text
-    ('disabled', 'fg:#858585 italic'),   # disabled choices for select and checkbox prompts
-    ('answer', 'fg:#f44336 bold'),      # submitted answer text behind the question
+    # disabled choices for select and checkbox prompts
+    ('disabled', 'fg:#858585 italic'),
+    # submitted answer text behind the question
+    ('answer', 'fg:#f44336 bold'),
 ])
 
 # api routes/endpoints
@@ -60,8 +104,15 @@ routes = {
             'open_bills': '?listarEmAberto=true',
             'all_bills': '?listarEmAberto=false'
         }
+    },
+    'pdf': {
+        'route': 'https://api-pa-cliente.equatorialenergia.com.br/api/v1/faturas/segunda-via/',
+        'options': {
+            'show_url': '?showUrl=true'
+        }
     }
 }
+
 
 def getToken(username, password):
     """
@@ -94,6 +145,7 @@ def getToken(username, password):
     # return token list object
     return token
 
+
 def extractUserDataFromToken(token):
     # get user data split in token
     encoded_user_data = token['access_token'].split('.')[1]
@@ -110,18 +162,25 @@ def extractUserDataFromToken(token):
     # return user data parsed as json
     return json_user_data
 
+
 def getUcs(personal_data):
     cc = personal_data['ContasContrato']
     ucs = []
     for contrato in cc:
+        Numero = contrato['Numero']
+        Endereco = contrato['Endereco']
+        Bairro = contrato['Bairro']
+        Cidade = contrato['Cidade']
+
         ucs.append(
             {
-                'numero': contrato['Numero'],
-                'endereco': contrato['Endereco'] + ', ' + contrato['Bairro'] + ', ' + contrato['Cidade']
+                'numero': Numero,
+                'endereco': Endereco + ', ' + Bairro + ', ' + Cidade
             }
         )
 
     return ucs
+
 
 def getOpenBills(ucs):
     # get open bills
@@ -132,26 +191,43 @@ def getOpenBills(ucs):
             url=routes['bills']['route'] + uc
         )
 
-        open_bills_data = json.loads(open_bills_resp.text)['data']['faturas'] if (open_bills_resp.status_code == 200 and 'application/json' in open_bills_resp.headers['Content-Type']) else 'Não há faturas em aberto para esta conta contrato.'
+        content = open_bills_resp.text
+        status = open_bills_resp.status_code
+        headers = open_bills_resp.headers
+
+        open_bills_data = json.loads(content)['data']['faturas'] if (
+            status == 200 and 'application/json' in headers['Content-Type']) else 'Não há faturas em aberto para esta conta contrato.'
         open_bills[uc] = open_bills_data
 
     return open_bills
 
+
 def getAllBills(uc):
     # get all bills
-    get_all_bills_url = 'https://api-pa-cliente.equatorialenergia.com.br/api/v1/debitos/' + uc + '?listarEmAberto=false'
-    all_bills_text = rq.get(url=get_all_bills_url).text
+    all_bills_url = routes['bills']['route'] + \
+        uc + routes['bills']['options']['all_bills']
+
+    all_bills_text = rq.get(url=all_bills_url).text
+
     all_bills = json.loads(all_bills_text)
+
     return all_bills
 
+
 def getBillPdf(bill_num, token):
-    bill_get_pdf = 'https://api-pa-cliente.equatorialenergia.com.br/api/v1/faturas/segunda-via/' + bill_num + '?showUrl=true'
-    headers_get_pdf = {
+    get_bill_pdf_url = routes['pdf']['route'] + bill_num + \
+        routes['pdf']['route']['options']['show_url']
+
+    get_bill_pdf_headers = {
         'Authorization': token['token_type'] + ' ' + token['access_token']
     }
-    bill_text = rq.get(url=bill_get_pdf, headers=headers_get_pdf).text
+
+    bill_text = rq.get(url=get_bill_pdf_url, headers=get_bill_pdf_headers).text
+
     bill = json.loads(bill_text)
+
     return bill
+
 
 def saveBillPdf(bill_data, period, name='fatura_equatorial'):
     """
@@ -183,6 +259,7 @@ def saveBillPdf(bill_data, period, name='fatura_equatorial'):
     except Exception as e:
         raise(e)
 
+
 def log(string, color, font="slant", figlet=False):
     if colored:
         if not figlet:
@@ -193,6 +270,7 @@ def log(string, color, font="slant", figlet=False):
     else:
         six.print_(string)
 
+
 class EmptyValidator(Validator):
     def validate(self, value):
         if len(value.text):
@@ -201,6 +279,7 @@ class EmptyValidator(Validator):
             raise ValidationError(
                 message="Esse campo é de preenchimento obrigatório.",
                 cursor_position=len(value.text))
+
 
 def askUcs(personal_data):
 
@@ -213,7 +292,8 @@ def askUcs(personal_data):
     for uc in ucs:
         uc_choices.append(
             Choice(
-                title='{num} - {end}'.format(num=uc['numero'], end=uc['endereco']),
+                title='{num} - {end}'.format(num=uc['numero'],
+                                             end=uc['endereco']),
                 value=uc['numero']
             )
         )
@@ -231,8 +311,6 @@ def askUcs(personal_data):
         style=custom_style
     ).ask()
 
-
-
     # selected all ucs
     if selected_uc == 'all':
         for choice in uc_choices:
@@ -244,6 +322,7 @@ def askUcs(personal_data):
         selected.append(selected_uc)
 
     return selected
+
 
 def askPersonalData():
     cpf = questionary.text(
@@ -260,6 +339,7 @@ def askPersonalData():
 
     return cpf.strip(), born_date.strip()
 
+
 def saveOpenBills(uc_bills_dict, token):
     for index in uc_bills_dict:
         if type(uc_bills_dict[index]) is list:
@@ -273,9 +353,11 @@ def saveOpenBills(uc_bills_dict, token):
                         name='fatura_equatorial_{uc}'.format(uc=index)
                     )
                 except Exception as e:
-                    raise Exception("Ocorreu um erro ao salvar a fatura: %s" % (e))
+                    raise Exception(
+                        "Ocorreu um erro ao salvar a fatura: %s" % (e))
         else:
             print('Sem faturas abertas para a uc {uc}!'.format(uc=index))
+
 
 @click.command()
 def main():
@@ -287,15 +369,21 @@ def main():
     log("Bem Vindo ao Equatorial/PA CLI", "green")
 
     cpf, born_date = askPersonalData()
-    token = getToken(cpf, born_date)
+    token = []
+    with Spinner():
+        token = getToken(cpf, born_date)
     personal_data = extractUserDataFromToken(token)
     selected_uc = askUcs(personal_data)
-    uc_bills_dict = getOpenBills(selected_uc)
+    uc_bills_dict = {}
+    with Spinner():
+        uc_bills_dict = getOpenBills(selected_uc)
 
     try:
-        saveOpenBills(uc_bills_dict, token)
+        with Spinner():
+            saveOpenBills(uc_bills_dict, token)
     except Exception as e:
         raise(e)
+
 
 if __name__ == '__main__':
     main()
